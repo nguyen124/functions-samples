@@ -87,6 +87,11 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
     fs.unlinkSync(tempLocalFile);
   } else if (contentType.startsWith('video/')) {
     // This is to prevent triggering another converting mp4 file after already convert
+    var codec = await getCodec(tempLocalFile);
+    console.log("Codec of file is: " + codec);
+    if (codec === "h264") {
+      return;
+    }
     if (fileName.endsWith('_output.mp4')) {
       return;
     }
@@ -106,6 +111,25 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
     fs.unlinkSync(tempLocalFile);
   }
 });
+
+function getCodec(filePath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) {
+        return reject(err);
+      } else {
+        var videoCodec = null;
+        metadata.streams.forEach((stream) => {
+          if (stream.codec_type === "video") {
+            videoCodec = stream.codec_name;
+            return resolve(videoCodec);
+          }
+        });
+      }
+    });
+  })
+}
+
 
 function convertFile(input, output) {
   return new Promise((resolve, reject) => {
