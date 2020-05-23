@@ -62,7 +62,7 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
   // Exit if this is triggered on a file that is not an image.
   if (contentType.startsWith('image/')) {
     // Exit if the image is already a thumbnail. This is to prevent new thumb nail file uploaded and trigger another processing of thumbnail 
-    if (fileName.startsWith(THUMB_PREFIX)) {
+    if (fileName.startsWith(THUMB_PREFIX) || fileName.endsWith('_poster.gif')) {
       return;
     }
     console.log('Enter converting image');
@@ -94,7 +94,7 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
     console.log("Codec of file " + tempLocalFile + " is: " + codec);
     // we only convert video which has codec not h264
     if (codec !== "h264") {
-      const mp4FilePath = path.normalize(path.join(fileDir, fileName.replace(/\.[^/.]+$/, '') + '_output.mp4'));
+      const mp4FilePath = path.normalize(path.join(fileDir, fileName.replace(/\.[^/.]+$/, '_output.mp4')));
       const targetTempFilePath = path.join(os.tmpdir(), mp4FilePath);
       await convertFile(tempLocalFile, targetTempFilePath, '100%');
       await bucket.upload(targetTempFilePath, {
@@ -123,7 +123,7 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
     if (reduce > 0) {
       console.log("Original width: " + dimensions.width + ". Original height: " + dimensions.height);
       console.log("create video thumb with percentage:", reduce);
-      const mp4FilePathThumb = path.normalize(path.join(fileDir, fileName.replace(/\.[^/.]+$/, '') + '_thumb_output.mp4'));
+      const mp4FilePathThumb = path.normalize(path.join(fileDir, fileName.replace(/\.[^/.]+$/, '_thumb_output.mp4')));
       const targetTempFilePathThumb = path.join(os.tmpdir(), mp4FilePathThumb);
       await convertFile(tempLocalFile, targetTempFilePathThumb, reduce + '%');
       await bucket.upload(targetTempFilePathThumb, {
