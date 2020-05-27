@@ -43,7 +43,7 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
   // File and directory paths.
   const filePath = object.name;
   const contentType = object.contentType; // This is the image MIME type
-  if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) {
+  if (!contentType.toLowerCase().startsWith('image/') && !contentType.toLowerCase().startsWith('video/')) {
     //console.log("Not a video or image file");
     return;
   }
@@ -57,15 +57,19 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
   // Download file from bucket.
   const file = bucket.file(filePath);
   await file.download({ destination: tempLocalFile });
-  console.log('The file has been downloaded to', tempLocalFile);
+  //console.log('The file has been downloaded to', tempLocalFile);
 
   // Exit if this is triggered on a file that is not an image.
-  if (contentType.startsWith('image/')) {
+  if (contentType.toLowerCase().startsWith('image/')) {
     // Exit if the image is already a thumbnail. This is to prevent new thumb nail file uploaded and trigger another processing of thumbnail 
-    if (fileName.startsWith(THUMB_PREFIX) || fileName.endsWith('_poster.gif')) {
+    if (fileName.toLowerCase().startsWith(THUMB_PREFIX) || fileName.toLowerCase().endsWith('_poster.jpg')) {
       return;
     }
-    console.log('Enter converting image');
+    var picDimensions = await getDimentions(tempLocalFile);
+    if (picDimensions.width < THUMB_MAX_WIDTH && picDimensions.height < THUMB_MAX_HEIGHT) {
+      return;
+    }
+    //console.log('Enter creating thumbnail image');
     const thumbFilePath = path.normalize(path.join(fileDir, `${THUMB_PREFIX}${fileName}`));
     const tempLocalThumbFile = path.join(os.tmpdir(), thumbFilePath);
     // Cloud Storage files.
@@ -75,23 +79,23 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
     };
     // Generate a thumbnail using ImageMagick.
     await spawn('convert', [tempLocalFile, '-thumbnail', `${THUMB_MAX_WIDTH}x${THUMB_MAX_HEIGHT}>`, tempLocalThumbFile], { capture: ['stdout', 'stderr'] });
-    console.log('Thumbnail created at', tempLocalThumbFile);
+    //console.log('Thumbnail created at', tempLocalThumbFile);
     // Uploading the Thumbnail.
     await bucket.upload(tempLocalThumbFile, {
       destination: thumbFilePath,
       public: true,
       metadata: metadata
     });
-    console.log('Thumbnail image uploaded to Storage at', thumbFilePath);
+    //console.log('Thumbnail image uploaded to Storage at', thumbFilePath);
     fs.unlinkSync(tempLocalThumbFile);
     fs.unlinkSync(tempLocalFile);
-  } else if (contentType.startsWith('video/')) {
+  } else if (contentType.toLowerCase().startsWith('video/')) {
     // This is to prevent triggering another converting mp4 file after already convert
-    if (fileName.endsWith('_output.mp4')) {
+    if (fileName.toLowerCase().endsWith('_output.mp4')) {
       return;
     }
     var codec = await getCodec(tempLocalFile);
-    console.log("Codec of file " + tempLocalFile + " is: " + codec);
+    //console.log("Codec of file " + tempLocalFile + " is: " + codec);
     // we only convert video which has codec not h264
     if (codec !== "h264") {
       const mp4FilePath = path.normalize(path.join(fileDir, fileName.replace(/\.[^/.]+$/, '_output.mp4')));
@@ -121,8 +125,8 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
     }
     var reduce = Math.floor(reduceHeightPercentage < reduceWidthPercentage ? reduceHeightPercentage : reduceWidthPercentage);
     if (reduce > 0) {
-      console.log("Original width: " + dimensions.width + ". Original height: " + dimensions.height);
-      console.log("create video thumb with percentage:", reduce);
+      //console.log("Original width: " + dimensions.width + ". Original height: " + dimensions.height);
+      //console.log("create video thumb with percentage:", reduce);
       const mp4FilePathThumb = path.normalize(path.join(fileDir, fileName.replace(/\.[^/.]+$/, '_thumb_output.mp4')));
       const targetTempFilePathThumb = path.join(os.tmpdir(), mp4FilePathThumb);
       await convertFile(tempLocalFile, targetTempFilePathThumb, reduce + '%');
@@ -141,10 +145,11 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
 });
 
 function getCodec(filePath) {
-  console.log("Begin get codec of: " + filePath);
+  //console.log("Begin get codec of: " + filePath);
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
       if (err) {
+        console.log("Error in get codec: " + err);
         return reject(err);
       } else {
         var videoCodec = null;
@@ -160,7 +165,7 @@ function getCodec(filePath) {
 }
 
 function getDimentions(media) {
-  console.log("Getting Dimentions from:", media);
+  //console.log("Getting Dimentions from:", media);
   return new Promise((res, rej) => {
     ffmpeg.ffprobe(media, (err, metadata) => {
       if (err) {
@@ -177,17 +182,17 @@ function getDimentions(media) {
 
 function convertFile(input, output, size) {
   return new Promise((resolve, reject) => {
-    console.log("Entering converting file: " + size);
+    //console.log("Entering converting file: " + size);
     ffmpeg(input)
       .format("mp4")
       .videoCodec("libx264")
       .size(size)
       .on('error', (err) => {
-        console.log("Error in converting file");
+        console.log("Error in converting file: " + err);
         reject(err);
       })
       .on('end', () => {
-        console.log("Success in converting file");
+        //console.log("Success in converting file");
         resolve(output);
       }).saveToFile(output);
   });
