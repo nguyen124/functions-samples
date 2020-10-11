@@ -113,6 +113,8 @@ exports.generateThumbnail = functions.storage.object().onFinalize(async (object)
       fs.unlinkSync(targetTempFilePath);
     }
 
+    await createPoster(bucket, filePath, tempLocalFile);
+
     var dimensions = await getDimentions(tempLocalFile);
     //create thumb for video
     var reduceHeightPercentage = 0,
@@ -195,5 +197,45 @@ function convertFile(input, output, size) {
         //console.log("Success in converting file");
         resolve(output);
       }).saveToFile(output);
+  });
+}
+
+async function createPoster(bucket, filePath, tempLocalFile) {
+  const remotePath = filePath.replace(/\.[^/.]+$/, '_poster.jpg');
+  const localPath = path.join(os.tmpdir(), remotePath);
+  await createPosterFromVideo(tempLocalFile, localPath);
+  await bucket.upload(localPath, {
+      destination: remotePath,
+      uploadType: 'media',
+      resumable: false,
+      metadata: { gzip: true, cacheControl: "public, max-age=31536000" }
+  });
+  fs.unlinkSync(localPath);
+}
+
+function createPosterFromVideo(input, output) {
+  return new Promise((resolve, reject) => {
+      ffmpeg(input)
+          .seek(1)
+          .frames(1)
+          .on('error', (err) => {
+              console.log("Error in create poster: " + err);
+              reject(err);
+          })
+          .on('end', () => {
+              //console.log("Success in create poster");
+              resolve(output);
+          })
+          .saveToFile(output);
+      //DONOT DELETE THIS COMMENT
+      // exec('ffmpeg -t 2.5 -i ' + input + ' -filter_complex "[0:v] fps=5,scale=w=480:h=-1,split [a][b];[a] palettegen=stats_mode=single [p];[b][p] paletteuse=new=1" ' + output, (error, stdout) => {
+      //     if (error) {
+      //         console.log(`error: ${error.message}`);
+      //         reject(error);
+      //         return;
+      //     }
+      //     resolve(output);
+      //     console.log(`stdout: ${stdout}`);
+      // });
   });
 }
